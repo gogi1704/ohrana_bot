@@ -83,7 +83,7 @@ async def sync_from_google_sheets():
         for row in api_keys:
             key, is_active = row
             await db.execute(
-                "INSERT INTO api_keys (key, is_active) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO api_keys (key, is_active) VALUES (?, ?)",
                 (key.strip(), is_active.strip() == "TRUE")
             )
 
@@ -117,16 +117,25 @@ async def sync_from_google_sheets():
 
 async def sync_to_google_sheets():
     sheets = get_sheet()
-
     async with aiosqlite.connect(DB_PATH) as db:
+        # Сначала читаем данные из SQLite
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("SELECT * FROM api_keys") as cursor:
+                keys = await cursor.fetchall()
 
-        async with db.execute("SELECT * FROM api_keys") as cursor:
-            keys = await cursor.fetchall()
+        # Преобразуем данные вне подключения к базе
         header = ["key", "is_active"]
-        data = [[str(r) for r in row] for row in keys]
-        sheet = sheets["api_keys"]
-        sheet.clear()
-        sheet.update('A1', [header] + data)
+        data = [[row[0], "TRUE" if row[1] else "FALSE"] for row in keys]
+
+        # Работаем с gspread отдельно (синхронно!)
+        try:
+            sheets = get_sheet()
+            sheet = sheets["api_keys"]
+            sheet.clear()
+            sheet.update('A1', [header] + data)
+            print("[+] Успешная синхронизация с Google Sheets")
+        except Exception as e:
+            print(f"[!] Ошибка при обновлении Google Sheets но это нормально: {e} ")
 
         # === users_data ===
         async with db.execute("SELECT * FROM users_data") as cursor:

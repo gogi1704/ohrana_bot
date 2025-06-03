@@ -91,15 +91,12 @@ def get_chunks_filtered(user_question: str):
 
 async def get_gpt_answer(system_prompt, user_prompt):
     keys = await db.get_active_keys()
-    print(keys)
     answer = "Empty_keys"
     for key in keys:
-        print(key)
         update_openai_api_key(new_key= key)
         load_dotenv(override=True)
         client = AsyncOpenAI(api_key=key)
         answer = await call_openai_with_auto_key(system_prompt=system_prompt, user_prompt=user_prompt, client=client)
-        print(answer)
 
         if answer == "error":
             await db.deactivate_key(key)
