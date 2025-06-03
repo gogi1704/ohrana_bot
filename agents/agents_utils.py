@@ -1,5 +1,4 @@
 import os
-import openai
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import util_funs
@@ -8,16 +7,11 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.schema import Document
 from agents import agent_prompts
 import db.user_history_db as db
-from openai import OpenAIError
 
 load_dotenv()
 
 model_gpt4o_mini = "gpt-4.1-2025-04-14"
 model_gpt_4o = "gpt-4o-2024-08-06"
-####################
-# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-# openai.api_key = OPENAI_API_KEY
-# client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 def update_openai_api_key(new_key: str, env_path: str = ".env"):
     # Обновляем .env файл

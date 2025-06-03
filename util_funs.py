@@ -3,7 +3,6 @@ import requests
 import re
 import os
 import resources
-from resources import baza_answers_url
 import json
 
 
