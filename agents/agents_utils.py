@@ -12,8 +12,8 @@ load_dotenv()
 
 model_gpt4o_mini = "gpt-4.1-2025-04-14"
 model_gpt_4o = "gpt-4o-2024-08-06"
-
-def update_openai_api_key(new_key: str, env_path: str = ".env"):
+env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+def update_openai_api_key(new_key: str, env_path: str = env_path):
     # Обновляем .env файл
     with open(env_path, "r", encoding="utf-8") as f:
         lines = f.readlines()

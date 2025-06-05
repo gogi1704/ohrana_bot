@@ -1,4 +1,5 @@
-base_url = "http://127.0.0.1:5000/"
+base_url = "http://213.148.9.40:8001/"
+# base_url = "http://127.0.0.1:5000/"
 api_commands = {
                 "transfer":"api/transfer_get_date",
                 "manager":"api/manager_get_info",
