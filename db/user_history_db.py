@@ -117,54 +117,61 @@ async def sync_from_google_sheets():
 
 async def sync_to_google_sheets():
     sheets = get_sheet()
+
     async with aiosqlite.connect(DB_PATH) as db:
-        # Сначала читаем данные из SQLite
-        async with aiosqlite.connect(DB_PATH) as db:
+        # api_keys
+        try:
             async with db.execute("SELECT * FROM api_keys") as cursor:
                 keys = await cursor.fetchall()
-
-        # Преобразуем данные вне подключения к базе
-        header = ["key", "is_active"]
-        data = [[row[0], "TRUE" if row[1] else "FALSE"] for row in keys]
-
-        # Работаем с gspread отдельно (синхронно!)
-        try:
-            sheets = get_sheet()
+            header = ["key", "is_active"]
+            data = [[row[0], "TRUE" if row[1] else "FALSE"] for row in keys]
             sheet = sheets["api_keys"]
             sheet.clear()
             sheet.update('A1', [header] + data)
-            print("[+] Успешная синхронизация с Google Sheets")
+            print("[✅] api_keys обновлены")
         except Exception as e:
-            print(f"[!] Ошибка при обновлении Google Sheets но это нормально: {e} ")
+            print(f"[❌] Ошибка api_keys: {e}")
 
-        # === users_data ===
-        async with db.execute("SELECT * FROM users_data") as cursor:
-            users = await cursor.fetchall()
-        header = ["user_id", "user_name", "company", "state"]
-        data = [[str(r) if r is not None else "" for r in row] for row in users]
-        sheet = sheets["users_data"]
-        sheet.clear()
-        sheet.update('A1', [header] + data)
+        # users_data
+        try:
+            async with db.execute("SELECT * FROM users_data") as cursor:
+                users = await cursor.fetchall()
+            header = ["user_id", "user_name", "company", "state"]
+            data = [[str(r) if r is not None else "" for r in row] for row in users]
+            sheet = sheets["users_data"]
+            sheet.clear()
+            sheet.update('A1', [header] + data)
+            print("[✅] users_data обновлены")
+        except Exception as e:
+            print(f"[❌] Ошибка users_data: {e}")
 
-        # === messages ===
-        async with db.execute("SELECT * FROM messages") as cursor:
-            messages = await cursor.fetchall()
-        header = ["user_id", "message"]
-        data = [[str(r) for r in row] for row in messages]
-        sheet = sheets["messages"]
-        sheet.clear()
-        sheet.update('A1', [header] + data)
+        # messages
+        try:
+            async with db.execute("SELECT * FROM messages") as cursor:
+                messages = await cursor.fetchall()
+            header = ["user_id", "message"]
+            data = [[str(r) for r in row] for row in messages]
+            sheet = sheets["messages"]
+            sheet.clear()
+            sheet.update('A1', [header] + data)
+            print("[✅] messages обновлены")
+        except Exception as e:
+            print(f"[❌] Ошибка messages: {e}")
 
-        # === message_links ===
-        async with db.execute("SELECT * FROM message_links") as cursor:
-            links = await cursor.fetchall()
-        header = ["group_message_id", "user_id"]
-        data = [[str(r) for r in row] for row in links]
-        sheet = sheets["message_links"]
-        sheet.clear()
-        sheet.update('A1', [header] + data)
+        # message_links
+        try:
+            async with db.execute("SELECT * FROM message_links") as cursor:
+                links = await cursor.fetchall()
+            header = ["group_message_id", "user_id"]
+            data = [[str(r) for r in row] for row in links]
+            sheet = sheets["message_links"]
+            sheet.clear()
+            sheet.update('A1', [header] + data)
+            print("[✅] message_links обновлены")
+        except Exception as e:
+            print(f"[❌] Ошибка message_links: {e}")
 
-async def periodic_sync(interval: int = 900):  # 900 сек = 15 мин
+async def periodic_sync(interval: int = 30):  # 900 сек = 15 мин
     while True:
         await asyncio.sleep(interval)
         try:
