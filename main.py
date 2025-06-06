@@ -84,7 +84,7 @@ async def get_consult_answer(user_id,user_say):
         return consult_answer
 
     elif question_category_dict["category"] == "transfer_que":
-        consult_answer = f"state: {resources.tg_states["transfer"]} | date:{question_category_dict["question"]}"
+        consult_answer = f"state: {resources.tg_states['transfer']} | date:{question_category_dict['question']}"
         await data_base.add_or_update_message(user_id=user_id, message="\n".join(dialog_text))
         return consult_answer
 
