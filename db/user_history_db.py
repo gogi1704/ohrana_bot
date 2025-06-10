@@ -171,7 +171,7 @@ async def sync_to_google_sheets():
         except Exception as e:
             print(f"[❌] Ошибка message_links: {e}")
 
-async def periodic_sync(interval: int = 30):  # 900 сек = 15 мин
+async def periodic_sync(interval: int = 900):  # 900 сек = 15 мин
     while True:
         await asyncio.sleep(interval)
         try:
