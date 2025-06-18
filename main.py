@@ -19,6 +19,7 @@ async def init_docs():
 
 async def start(user_id):
     user_name = await data_base.get_user_name(user_id)
+    await data_base.remove_history_by_id(user_id)
     if user_name:
         await data_base.add_or_update_message(user_id, f"Я сказал: {resources.get_start_text_with_name(user_name)}")
         return user_name
@@ -69,7 +70,10 @@ async def get_consult_answer(user_id,user_say):
         if question is None:
             question = user_say
 
-        texts_list = get_chunks_filtered(question)
+        texts_list = await get_chunks_filtered(question)
+        if len(texts_list) == 0 and question_category_dict["question"] is not None:
+            await data_base.add_question_without_answer_to_sheet(question)
+
         text_to_prompt = re.sub(r'\n{2}', ' ', '\n '.join([f'\nдокумент №{i+1}\n=====================' + doc + '\n' for i, doc in enumerate(texts_list)]))
         user_prompt = consult_user_prompt.format(question=user_say,
                                                  dialog = "\n".join(dialog_text),
@@ -151,6 +155,51 @@ async def transfer_get_date(user_id, user_say):
                                     message= "\n".join(dialog_text))
     return get_date_answer
 
+async def manager_human_dialog(user_id, user_say):
+    dialog_text = await data_base.get_history_by_id(user_id)
+    dialog_text.append(f"Пользователь сказал : {user_say}.\n")
+    questions_list = await data_base.get_user_questions(user_id)
+
+    if questions_list is None:
+        user_prompt_get_questions_list = manager_human_make_questions_list_user_prompt.format(user_que= user_say)
+        questions_list = await get_gpt_answer(system_prompt=manager_human_make_questions_list_system_prompt, user_prompt= user_prompt_get_questions_list)
+        print(questions_list)
+        await data_base.save_user_questions(user_id= user_id,questions= questions_list)
+
+    if questions_list != "que_exit":
+        user_prompt_manager_human_dialog = manager_human_dialog_user_prompt.format(dialog = "\n".join(dialog_text), questions = questions_list)
+        question_to_user = await get_gpt_answer(system_prompt=manager_human_dialog_system_prompt,user_prompt= user_prompt_manager_human_dialog)
+
+        checker_user_prompt = manager_human_checker_answers_user_prompt.format(dialog = "\n".join(dialog_text), questions = questions_list)
+        checker = await get_gpt_answer(system_prompt= manager_human_checker_answers_system_prompt, user_prompt= checker_user_prompt)
+
+        if question_to_user == "que_exit":
+            dialog_text.clear()
+            dialog_text.append(f"Консультант сказал : {resources.human_manager_exit_text}.")
+            result = "que_exit"
+
+        elif checker == "complete":
+            dialog_text.append(f"Консультант сказал : {resources.human_manager_complete_text}.")
+            result = "que_complete"
+
+        else:
+            result = question_to_user
+
+
+
+    else:
+        result = "que_exit"
+
+    await data_base.add_or_update_message(user_id= user_id,
+                                    message= "\n".join(dialog_text))
+
+    return result
+
+async def get_final_question(user_id, user_say):
+    dialog_text = await data_base.get_history_by_id(user_id)
+    user_prompt = manager_human_create_final_user_prompt.format(dialog= "\n".join(dialog_text))
+    return await get_gpt_answer(system_prompt= manager_human_create_final_question_system_prompt, user_prompt= user_prompt)
+
 async def get_company(user_id,user_say):
     dialog_text = await data_base.get_history_by_id(user_id)
     dialog_text.append(f"Пользователь сказал : {user_say}.\n")
@@ -193,13 +242,13 @@ async def get_state(user_id):
     state = await data_base.get_state(user_id= user_id)
     return state
 
-async def test_dialog():
-    init_docs()
-    get_chunks(user_question= "Где посмотреть отзывы?")
-    await data_base.init_db()
-
-
-
-
-if __name__ == "__main__":
-    asyncio.run(test_dialog())
+# async def test_dialog():
+#     init_docs()
+#     get_chunks(user_question= "Где посмотреть отзывы?")
+#     await data_base.init_db()
+#
+#
+#
+#
+# if __name__ == "__main__":
+#     asyncio.run(test_dialog())

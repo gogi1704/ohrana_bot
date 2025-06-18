@@ -1,11 +1,40 @@
 import resources
 import util_funs
-from resources import tg_states , get_state_complete_key, get_url_by_command, api_commands
+from resources import tg_states , get_state_complete_key, get_url_by_command
 from util_funs import send_request
 from telegram import Update,  Message
-from db.user_history_db import save_message_link, get_user_id_by_group_message, get_user_name
+from db.user_history_db import save_message_link, get_user_id_by_group_message, get_user_name, remove_history_by_id, delete_user_questions
 from telegram.ext import (ContextTypes)
 from telegram.constants import ChatAction
+from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+import asyncio
+
+to_question_keyboard = ReplyKeyboardMarkup(
+    [[KeyboardButton("Задать вопрос менеджеру")]],
+    resize_keyboard=True,
+    one_time_keyboard=False  # Кнопка остаётся, пока не сменится состояние
+    )
+
+exit_keyboard = ReplyKeyboardMarkup(
+    [[KeyboardButton("Выйти из режима")]],
+    resize_keyboard=True,
+    one_time_keyboard=False  # Кнопка остаётся, пока не сменится состояние
+    )
+
+async def handle_to_question_from_keyboard(update, context):
+    user_id = update.message.from_user.id
+    await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['manager_human']})
+    await remove_history_by_id(user_id)
+    await delete_user_questions(user_id)
+
+    await update.message.reply_text(
+        "Я помогу вам составить вопрос к нашему менеджеру. Если мне покажется , что вопрос будет не до конца понятен моему старшему менеджеру, то я могу уточнить некоторые моменты.Если вы не хотите задавать вопрос , то так и напишите или нажмите на соответствующую кнопку. Жду ваш вопрос...",
+        reply_markup= exit_keyboard
+    )
+
+
+async def handle_exit_from_keyboard(update, context):
+    await start(update, context)
 
 
 async def start(update, context)->int:
@@ -18,15 +47,19 @@ async def start(update, context)->int:
     if text == "empty":
         await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['hello']})
         answer = resources.start_text
+        if update.message:
+            await update.message.reply_text(answer)
+        elif update.callback_query:
+            await update.callback_query.message.reply_text(answer)
+
     else:
         await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
         answer = resources.get_start_text_with_name(user_name= text)
 
-    if update.message:
-        await update.message.reply_text(answer)
-    elif update.callback_query:
-        await update.callback_query.message.reply_text(answer)
-
+        if update.message:
+            await update.message.reply_text(answer, reply_markup= to_question_keyboard )
+        elif update.callback_query:
+            await update.callback_query.message.reply_text(answer, reply_markup= to_question_keyboard )
 
 async def handle_message(update, context) -> int:
     text_message = update.message.text
@@ -34,7 +67,9 @@ async def handle_message(update, context) -> int:
     payload = {"text_answer": text_message,
                "user_id": user_id
                }
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    asyncio.create_task(
+        context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    )
     # Получаем текущее состояние пользователя с сервера
     current_state = await send_request(get_url_by_command("get_state"), {"user_id": user_id, "state": "empty"})
 
@@ -55,6 +90,9 @@ async def handle_message(update, context) -> int:
 
     elif current_state == tg_states['transfer']:
         await handle_transfer(update, context, payload, user_id)
+
+    elif current_state == tg_states['manager_human']:
+        await handle_manager_human(update, context, payload, user_id)
 
 
 async def handle_hello(update, context, payload,user_id) -> int:
@@ -119,7 +157,7 @@ async def handle_manager(update, context, payload,user_id) -> int:
         await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
         user_name = await get_user_name(user_id=int(user_id))
         contact = util_funs.parse_manager_response(text)
-        message_text = f"Обращение.\nПользователь: {user_name}.\nКак связаться: {contact}."
+        message_text = f"#Обращение.\nПользователь: {user_name}.\nКак связаться: {contact}."
         await send_to_chat(update,context,message_text)
         text = resources.complete_manager_text
 
@@ -147,6 +185,27 @@ async def handle_transfer(update, context, payload,user_id) -> int:
             text = resources.transfer_error_text
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+
+async def handle_manager_human(update, context, payload,user_id) -> int:
+    text = await send_request(url=get_url_by_command(api_command="manager_human_dialog"),
+                              payload=payload)
+
+    if text == "que_exit":
+        await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
+        text = resources.human_manager_exit_text
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=to_question_keyboard)
+
+    elif text == "que_complete":
+        await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
+        final_question = await send_request(get_url_by_command("get_final_question"), payload= payload)
+        user_name = await get_user_name(user_id=int(user_id))
+        text_to_chat = f"#Вопрос\nПользователь:\nId пользователя- {user_id}\nИмя пользователя- {user_name}.\n\nВопрос: {final_question}"
+        await send_to_chat(update, context, text_to_chat)
+        text = resources.human_manager_complete_text
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=to_question_keyboard)
+
+    else:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
 
 

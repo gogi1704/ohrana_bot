@@ -1,7 +1,7 @@
 from telegram.ext import Application,CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from dotenv import load_dotenv
 import os
-from tg.tg_bot_navigation import start, handle_message, handle_manager_reply
+from tg.tg_bot_navigation import start, handle_message, handle_manager_reply, handle_to_question_from_keyboard, handle_exit_from_keyboard
 import resources
 
 
@@ -16,6 +16,12 @@ def main():
     start_handler = CommandHandler('start', start, block=False)
     text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message, block=False)
     manager_handler = MessageHandler(filters.Chat(int(resources.GROUP_CHAT_ID)) & filters.REPLY, handle_manager_reply)
+
+    exit_button_handler = MessageHandler(filters.TEXT & filters.Regex("^Выйти из режима$"), handle_exit_from_keyboard)
+    to_question_button_handler = MessageHandler(filters.TEXT & filters.Regex("^Задать вопрос менеджеру$"), handle_to_question_from_keyboard)
+
+    application.add_handler(exit_button_handler)
+    application.add_handler(to_question_button_handler)
 
     application.add_handler(manager_handler)
     application.add_handler(text_handler)
