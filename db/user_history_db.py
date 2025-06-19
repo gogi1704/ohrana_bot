@@ -82,6 +82,14 @@ async def init_db():
             )
         """)
 
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS last_buttons (
+                user_id INTEGER PRIMARY KEY,
+                message_id INTEGER,
+                text TEXT
+            )
+        """)
+
         try:
             await db.execute("ALTER TABLE users_data ADD COLUMN company TEXT")
         except aiosqlite.OperationalError as e:
@@ -347,6 +355,28 @@ async def delete_user_questions(user_id: int) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM user_questions WHERE user_id = ?", (user_id,))
         await db.commit()
+
+
+
+async def save_last_button(user_id: int, message_id: int, text: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT OR REPLACE INTO last_buttons (user_id, message_id, text)
+            VALUES (?, ?, ?)
+        """, (user_id, message_id, text))
+        await db.commit()
+
+async def get_last_button(user_id: int) -> Optional[tuple[int, str]]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT message_id, text FROM last_buttons WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row if row else None
+
+async def delete_last_button(user_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM last_buttons WHERE user_id = ?", (user_id,))
+        await db.commit()
+
 
 
 

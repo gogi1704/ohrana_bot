@@ -1,9 +1,10 @@
 import aiohttp
 import requests
-import re
 import os
 import resources
 import json
+import html
+import re
 
 
 def download_gdoc(url: str) :
@@ -103,3 +104,45 @@ def parse_transfer_response(json_string: str) -> tuple[str, str] | None:
     except json.JSONDecodeError:
         pass
     return None
+
+
+
+
+def highlight(text: str, style: str = "bold", mode: str = "HTML") -> str:
+    """
+    Оборачивает текст в нужный тег или маркер для Telegram-разметки.
+
+    :param text: Текст для выделения.
+    :param style: 'bold', 'italic', 'code', 'pre', 'underline'
+    :param mode: 'HTML' или 'MarkdownV2'
+    :return: Размеченный текст.
+    """
+    if mode.upper() == "HTML":
+        escaped = html.escape(text)
+        tags = {
+            "bold": f"<b>{escaped}</b>",
+            "italic": f"<i>{escaped}</i>",
+            "code": f"<code>{escaped}</code>",
+            "pre": f"<pre>{escaped}</pre>",
+            "underline": f"<u>{escaped}</u>",
+        }
+        return tags.get(style, escaped)
+
+    elif mode.upper() == "MARKDOWNV2":
+        # Экранируем спецсимволы Markdown V2
+        def escape_md(text):
+            return re.sub(r'([_*[\]()~`>#+\-=|{}.!])', r'\\\1', text)
+
+        escaped = escape_md(text)
+        tags = {
+            "bold": f"*{escaped}*",
+            "italic": f"_{escaped}_",
+            "code": f"`{escaped}`",
+            "pre": f"```{escaped}```",
+            "underline": f"__{escaped}__",
+        }
+        return tags.get(style, escaped)
+
+    else:
+        return text  # если mode неизвестен — вернём без изменений
+

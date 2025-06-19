@@ -1,40 +1,40 @@
 import resources
 import util_funs
 from resources import tg_states , get_state_complete_key, get_url_by_command
-from util_funs import send_request
+from util_funs import send_request, highlight
 from telegram import Update,  Message
-from db.user_history_db import save_message_link, get_user_id_by_group_message, get_user_name, remove_history_by_id, delete_user_questions
+from db.user_history_db import save_message_link, get_user_id_by_group_message, get_user_name, remove_history_by_id, delete_user_questions, delete_last_button, get_last_button, save_last_button
 from telegram.ext import (ContextTypes)
 from telegram.constants import ChatAction
-from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 import asyncio
 
-to_question_keyboard = ReplyKeyboardMarkup(
-    [[KeyboardButton("Задать вопрос менеджеру")]],
-    resize_keyboard=True,
-    one_time_keyboard=False  # Кнопка остаётся, пока не сменится состояние
-    )
+# to_question_keyboard = ReplyKeyboardMarkup(
+#     [[KeyboardButton("Задать вопрос менеджеру")]],
+#     resize_keyboard=True,
+#     one_time_keyboard=False  # Кнопка остаётся, пока не сменится состояние
+#     )
 
-exit_keyboard = ReplyKeyboardMarkup(
-    [[KeyboardButton("Выйти из режима")]],
-    resize_keyboard=True,
-    one_time_keyboard=False  # Кнопка остаётся, пока не сменится состояние
-    )
+# exit_keyboard = ReplyKeyboardMarkup(
+#     [[KeyboardButton("Выйти из режима")]],
+#     resize_keyboard=True,
+#     one_time_keyboard=False  # Кнопка остаётся, пока не сменится состояние
+#     )
 
-async def handle_to_question_from_keyboard(update, context):
-    user_id = update.message.from_user.id
-    await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['manager_human']})
-    await remove_history_by_id(user_id)
-    await delete_user_questions(user_id)
+# async def handle_to_question_from_keyboard(update, context):
+#     user_id = update.message.from_user.id
+#     await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['manager_human']})
+#     await remove_history_by_id(user_id)
+#     await delete_user_questions(user_id)
+#
+#     await update.message.reply_text(
+#         "Я помогу вам составить вопрос к нашему менеджеру. Если мне покажется , что вопрос будет не до конца понятен моему старшему менеджеру, то я могу уточнить некоторые моменты.Если вы не хотите задавать вопрос , то так и напишите или нажмите на соответствующую кнопку. Жду ваш вопрос...",
+#         reply_markup= exit_keyboard
+#     )
 
-    await update.message.reply_text(
-        "Я помогу вам составить вопрос к нашему менеджеру. Если мне покажется , что вопрос будет не до конца понятен моему старшему менеджеру, то я могу уточнить некоторые моменты.Если вы не хотите задавать вопрос , то так и напишите или нажмите на соответствующую кнопку. Жду ваш вопрос...",
-        reply_markup= exit_keyboard
-    )
 
-
-async def handle_exit_from_keyboard(update, context):
-    await start(update, context)
+# async def handle_exit_from_keyboard(update, context):
+#     await start(update, context)
 
 
 async def start(update, context)->int:
@@ -57,9 +57,11 @@ async def start(update, context)->int:
         answer = resources.get_start_text_with_name(user_name= text)
 
         if update.message:
-            await update.message.reply_text(answer, reply_markup= to_question_keyboard )
+            # await update.message.reply_text(answer, reply_markup= to_question_keyboard )
+            await update.message.reply_text(answer)
         elif update.callback_query:
-            await update.callback_query.message.reply_text(answer, reply_markup= to_question_keyboard )
+            # await update.callback_query.message.reply_text(answer, reply_markup= to_question_keyboard )
+            await update.callback_query.message.reply_text(answer)
 
 async def handle_message(update, context) -> int:
     text_message = update.message.text
@@ -72,6 +74,19 @@ async def handle_message(update, context) -> int:
     )
     # Получаем текущее состояние пользователя с сервера
     current_state = await send_request(get_url_by_command("get_state"), {"user_id": user_id, "state": "empty"})
+
+    last_button = await get_last_button(user_id)
+    if last_button:
+        message_id, _ = last_button
+        try:
+            await context.bot.edit_message_reply_markup(
+                chat_id=update.effective_chat.id,
+                message_id=message_id,
+                reply_markup=None
+            )
+        except Exception as e:
+            print(f"❌ Не удалось удалить кнопку: {e}")
+        await delete_last_button(user_id)
 
     if current_state == tg_states['hello']:
         await handle_hello(update, context, payload, user_id)
@@ -147,7 +162,26 @@ async def handle_consult(update, context, payload,user_id) -> int:
         text = await send_request(url = get_url_by_command(api_command="transfer"),
                                   payload=payload)
 
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+    if text.startswith("#Взято_из_сети"):
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Отправить менеджеру", callback_data=f"send_answer|{user_id}")]
+        ])
+        result = f"{text}\n\n{highlight(text= 'Ответ сформирован с помощью сети интернет. Если вы не доверяете этому ответу , и хотите получить информацию от нашего менеджера, то нажмите соответствующую кнопку.',
+                                        style= 'italic',
+                                        mode= 'HTML')}"
+
+        sent = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=result,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+        await save_last_button(user_id, sent.message_id, result)
+
+        # await с конпкой
+    else:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
 async def handle_manager(update, context, payload,user_id) -> int:
     text = await send_request(url=get_url_by_command(api_command="manager"),
@@ -193,7 +227,8 @@ async def handle_manager_human(update, context, payload,user_id) -> int:
     if text == "que_exit":
         await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
         text = resources.human_manager_exit_text
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=to_question_keyboard)
+        # await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=to_question_keyboard)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
     elif text == "que_complete":
         await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
@@ -202,11 +237,47 @@ async def handle_manager_human(update, context, payload,user_id) -> int:
         text_to_chat = f"#Вопрос\nПользователь:\nId пользователя- {user_id}\nИмя пользователя- {user_name}.\n\nВопрос: {final_question}"
         await send_to_chat(update, context, text_to_chat)
         text = resources.human_manager_complete_text
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=to_question_keyboard)
-
+        # await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=to_question_keyboard)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
+async def handle_send_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    # Извлечь user_id из callback_data
+    data = query.data
+    _, user_id = data.split("|")
+    user_id = int(user_id)
+    user_name = await get_user_name(user_id)
+    # Получить текст вопроса из базы
+    last_button = await get_last_button(user_id)
+    if not last_button:
+        await query.edit_message_text("Произошла ошибка. Не удалось найти текст вопроса.")
+        return
+
+    message_id, text_answer = last_button
+    answer = f"Диалог_с_{user_id}\nИмя пользователя: {user_name}\n\n{text_answer}"
+    # Формируем payload и получаем финальный вопрос
+    payload = {
+        "text_answer": text_answer,
+        "user_id": user_id
+    }
+
+    question = await send_request(
+        url=get_url_by_command("get_final_question"),
+        payload=payload
+    )
+
+    # Отправляем в групповой чат
+    await send_to_chat(update, context, question)
+
+    # Удаляем кнопку
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    # Удаляем запись из базы
+    await delete_last_button(user_id)
 
 
 async def send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, message_text):

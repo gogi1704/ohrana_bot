@@ -72,15 +72,19 @@ async def get_consult_answer(user_id,user_say):
 
         texts_list = await get_chunks_filtered(question)
         if len(texts_list) == 0 and question_category_dict["question"] is not None:
-            await data_base.add_question_without_answer_to_sheet(question)
+            asyncio.create_task(data_base.add_question_without_answer_to_sheet(question))
+            free_user_prompt = free_bot_user_prompt.format(dialog= "\n".join(dialog_text))
+            answer = await get_gpt_answer(system_prompt= free_bot_system_prompt, user_prompt= free_user_prompt )
+            consult_answer = f"#Взято_из_сети\n{answer}"
 
-        text_to_prompt = re.sub(r'\n{2}', ' ', '\n '.join([f'\nдокумент №{i+1}\n=====================' + doc + '\n' for i, doc in enumerate(texts_list)]))
-        user_prompt = consult_user_prompt.format(question=user_say,
-                                                 dialog = "\n".join(dialog_text),
-                                                 docs = text_to_prompt)
+        else:
+            text_to_prompt = re.sub(r'\n{2}', ' ', '\n '.join([f'\nдокумент №{i+1}\n=====================' + doc + '\n' for i, doc in enumerate(texts_list)]))
+            user_prompt = consult_user_prompt.format(question=user_say,
+                                                     dialog = "\n".join(dialog_text),
+                                                     docs = text_to_prompt)
 
-        consult_answer = await  get_gpt_answer(system_prompt= consult_system_prompt,
-                                               user_prompt= user_prompt)
+            consult_answer = await  get_gpt_answer(system_prompt= consult_system_prompt,
+                                                    user_prompt= user_prompt)
 
     elif question_category_dict["category"] == "manager_que":
         consult_answer = resources.tg_states["manager"]
