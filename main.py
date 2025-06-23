@@ -85,6 +85,14 @@ async def get_consult_answer(user_id,user_say):
 
             consult_answer = await  get_gpt_answer(system_prompt= consult_system_prompt,
                                                     user_prompt= user_prompt)
+            print(consult_answer)
+            if consult_answer == "empty":
+                asyncio.create_task(data_base.add_question_without_answer_to_sheet(question))
+                free_user_prompt = free_bot_user_prompt.format(dialog="\n".join(dialog_text))
+                answer = await get_gpt_answer(system_prompt=free_bot_system_prompt, user_prompt=free_user_prompt)
+
+                consult_answer = f"#Взято_из_сети\n{answer}"
+
 
     elif question_category_dict["category"] == "manager_que":
         consult_answer = resources.tg_states["manager"]

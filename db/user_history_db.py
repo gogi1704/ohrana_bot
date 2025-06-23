@@ -89,6 +89,12 @@ async def init_db():
                 text TEXT
             )
         """)
+        await  db.execute("""
+            CREATE TABLE IF NOT EXISTS user_reply_states  (
+                user_id INTEGER PRIMARY KEY,
+                manager_msg_id  INTEGER
+            )
+        """)
 
         try:
             await db.execute("ALTER TABLE users_data ADD COLUMN company TEXT")
@@ -97,6 +103,11 @@ async def init_db():
                 raise  # Только если колонка уже есть — игнорируем
         try:
             await db.execute("ALTER TABLE users_data ADD COLUMN state TEXT DEFAULT NULL")
+        except aiosqlite.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise  # Только если колонка уже есть — игнорируем
+        try:
+            await db.execute("ALTER TABLE users_data ADD COLUMN life_que_keyboard TEXT DEFAULT NULL")
         except aiosqlite.OperationalError as e:
             if "duplicate column name" not in str(e):
                 raise  # Только если колонка уже есть — игнорируем
@@ -376,6 +387,67 @@ async def delete_last_button(user_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM last_buttons WHERE user_id = ?", (user_id,))
         await db.commit()
+
+
+async def get_life_que_keyboard(user_id: int) -> Optional[str]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT life_que_keyboard FROM users_data WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+async def save_life_que_keyboard(user_id: int, keyboard: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO users_data (user_id, life_que_keyboard)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET life_que_keyboard = excluded.life_que_keyboard
+            """,
+            (user_id, keyboard)
+        )
+        await db.commit()
+
+async def delete_life_que_keyboard(user_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users_data SET life_que_keyboard = NULL WHERE user_id = ?",
+            (user_id,)
+        )
+        await db.commit()
+
+
+
+
+async def save_user_reply_state(user_id: int, manager_msg_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "REPLACE INTO user_reply_states (user_id, manager_msg_id) VALUES (?, ?)",
+            (user_id, manager_msg_id)
+        )
+        await db.commit()
+
+async def get_user_reply_state(user_id: int) -> int | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT manager_msg_id FROM user_reply_states WHERE user_id = ?",
+            (user_id,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
+async def delete_user_reply_state(user_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM user_reply_states WHERE user_id = ?",
+            (user_id,)
+        )
+        await db.commit()
+
+
+
 
 
 
