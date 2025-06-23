@@ -74,7 +74,7 @@ def get_chunks(user_question, chunks_count= 3):
     context = "\n\n".join([doc.page_content for doc in docs])
 
 
-def get_chunks_filtered(user_question: str):
+async def get_chunks_filtered(user_question: str):
     vector_store = get_vector_store()
     results = vector_store.similarity_search_with_score(user_question, k=8)  # k - количество топ-результатов
     threshold = 0.3

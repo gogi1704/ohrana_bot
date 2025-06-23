@@ -1,12 +1,13 @@
-import aiosqlite
 from typing import Optional, List
-import os
+import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import asyncio
 import aiosqlite
 import os
 from dotenv import load_dotenv
+from gspread_asyncio import AsyncioGspreadClientManager
+
 
 load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,10 +26,27 @@ def get_sheet():
         "messages": sheet.worksheet("messages"),
         "message_links": sheet.worksheet("message_links"),
         "api_keys": sheet.worksheet("api_keys"),
+        "user_questions": sheet.worksheet("user_questions"),
     }
 
+def get_creds():
+    return ServiceAccountCredentials.from_json_keyfile_name(CREDS_PATH, SCOPE)
 
+async def add_question_without_answer_to_sheet(question):
+    try:
+        async_client = AsyncioGspreadClientManager(get_creds)
+        client = await async_client.authorize()
+        spreadsheet = await client.open("questions_answers")
+        worksheet = await spreadsheet.get_worksheet(0)
+        records = await worksheet.get_all_records()
+        last_number = records[-1]["Номер"] if records else 0
+        new_number = last_number + 1
 
+        await worksheet.append_row([new_number, question, ""])
+        print(f"✅ Добавлен вопрос #{new_number}: {question}")
+
+    except Exception as e:
+        print(e)
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
@@ -57,6 +75,27 @@ async def init_db():
             )
         """)
 
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_questions (
+                user_id INTEGER PRIMARY KEY,
+                questions TEXT
+            )
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS last_buttons (
+                user_id INTEGER PRIMARY KEY,
+                message_id INTEGER,
+                text TEXT
+            )
+        """)
+        await  db.execute("""
+            CREATE TABLE IF NOT EXISTS user_reply_states  (
+                user_id INTEGER PRIMARY KEY,
+                manager_msg_id  INTEGER
+            )
+        """)
+
         try:
             await db.execute("ALTER TABLE users_data ADD COLUMN company TEXT")
         except aiosqlite.OperationalError as e:
@@ -64,6 +103,11 @@ async def init_db():
                 raise  # Только если колонка уже есть — игнорируем
         try:
             await db.execute("ALTER TABLE users_data ADD COLUMN state TEXT DEFAULT NULL")
+        except aiosqlite.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise  # Только если колонка уже есть — игнорируем
+        try:
+            await db.execute("ALTER TABLE users_data ADD COLUMN life_que_keyboard TEXT DEFAULT NULL")
         except aiosqlite.OperationalError as e:
             if "duplicate column name" not in str(e):
                 raise  # Только если колонка уже есть — игнорируем
@@ -78,6 +122,7 @@ async def sync_from_google_sheets():
         await db.execute("DELETE FROM messages")
         await db.execute("DELETE FROM message_links")
         await db.execute("DELETE FROM api_keys")
+        await db.execute("DELETE FROM user_questions")
 
         api_keys = sheets["api_keys"].get_all_values()[1:]  # пропустить заголовок
         for row in api_keys:
@@ -112,6 +157,15 @@ async def sync_from_google_sheets():
             await db.execute(
                 "INSERT INTO message_links (group_message_id, user_id) VALUES (?, ?)",
                 (int(group_message_id), int(user_id))
+            )
+
+        # user_questions
+        questions = sheets["user_questions"].get_all_values()[1:]
+        for row in questions:
+            user_id, question = row
+            await db.execute(
+                "INSERT INTO user_questions (user_id, question) VALUES (?, ?)",
+                (int(user_id), int(question))
             )
         await db.commit()
 
@@ -170,6 +224,19 @@ async def sync_to_google_sheets():
             print("[✅] message_links обновлены")
         except Exception as e:
             print(f"[❌] Ошибка message_links: {e}")
+
+        # user_questions
+        try:
+            async with db.execute("SELECT * FROM user_questions") as cursor:
+                rows = await cursor.fetchall()
+            header = ["user_id", "questions"]
+            data = [[str(row[0]), row[1]] for row in rows]
+            sheet = sheets["user_questions"]
+            sheet.clear()
+            sheet.update('A1', [header] + data)
+            print("[✅] user_questions обновлены")
+        except Exception as e:
+            print(f"[❌] Ошибка user_questions: {e}")
 
 async def periodic_sync(interval: int = 900):  # 900 сек = 15 мин
     while True:
@@ -261,7 +328,6 @@ async def get_state(user_id: int) -> Optional[str]:
             return row[0] if row else None
 
 
-
 async def get_active_keys() -> list[str]:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT key FROM api_keys WHERE is_active=1") as cursor:
@@ -276,6 +342,113 @@ async def deactivate_key(api_key: str):
         await sync_to_google_sheets()
     except Exception as e:
         print(f"Не удалось синхронизировать ключи: {e}")
+
+async def save_user_questions(user_id: int, questions: List[str]) -> None:
+    questions_json = json.dumps(questions, ensure_ascii=False)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO user_questions (user_id, questions) VALUES (?, ?)",
+            (user_id, questions_json)
+        )
+        await db.commit()
+
+async def get_user_questions(user_id: int) -> Optional[List[str]]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT questions FROM user_questions WHERE user_id = ?", (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return json.loads(row[0])
+            return None
+
+async def delete_user_questions(user_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM user_questions WHERE user_id = ?", (user_id,))
+        await db.commit()
+
+
+
+async def save_last_button(user_id: int, message_id: int, text: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT OR REPLACE INTO last_buttons (user_id, message_id, text)
+            VALUES (?, ?, ?)
+        """, (user_id, message_id, text))
+        await db.commit()
+
+async def get_last_button(user_id: int) -> Optional[tuple[int, str]]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT message_id, text FROM last_buttons WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row if row else None
+
+async def delete_last_button(user_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM last_buttons WHERE user_id = ?", (user_id,))
+        await db.commit()
+
+
+async def get_life_que_keyboard(user_id: int) -> Optional[str]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT life_que_keyboard FROM users_data WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+async def save_life_que_keyboard(user_id: int, keyboard: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO users_data (user_id, life_que_keyboard)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET life_que_keyboard = excluded.life_que_keyboard
+            """,
+            (user_id, keyboard)
+        )
+        await db.commit()
+
+async def delete_life_que_keyboard(user_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users_data SET life_que_keyboard = NULL WHERE user_id = ?",
+            (user_id,)
+        )
+        await db.commit()
+
+
+
+
+async def save_user_reply_state(user_id: int, manager_msg_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "REPLACE INTO user_reply_states (user_id, manager_msg_id) VALUES (?, ?)",
+            (user_id, manager_msg_id)
+        )
+        await db.commit()
+
+async def get_user_reply_state(user_id: int) -> int | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT manager_msg_id FROM user_reply_states WHERE user_id = ?",
+            (user_id,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
+async def delete_user_reply_state(user_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM user_reply_states WHERE user_id = ?",
+            (user_id,)
+        )
+        await db.commit()
+
+
+
+
 
 
 
