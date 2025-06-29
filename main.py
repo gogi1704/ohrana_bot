@@ -18,11 +18,13 @@ async def init_docs():
 async def start(user_id):
     user_name = await data_base.get_user_name(user_id)
     if user_name:
-        await data_base.add_or_update_message(user_id, f"Я сказал: {resources.start_text_without_name_to_dialog}")
+        dialog_text = await data_base.get_history_by_id(user_id)
+        dialog_text.append(f"Консультант сказал : {resources.start_text_without_name_to_dialog}")
+        await data_base.add_or_update_message(user_id, "\n".join(dialog_text))
         return user_name
     else:
         await data_base.add_user(user_id= user_id,user_name= "new_account")
-        await data_base.add_or_update_message(user_id,f"Я сказал: {resources.start_text}")
+        await data_base.add_or_update_message(user_id,f"Консультант сказал : {resources.start_text}")
         return None
 
 async def get_hello_dialog_answer(user_id, user_say):

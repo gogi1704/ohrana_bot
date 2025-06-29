@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
     # тут можно делать действия при завершении, если нужно
 app = FastAPI(lifespan = lifespan)
 
-# asyncio.create_task(sql_db.periodic_sync())
+asyncio.create_task(sql_db.periodic_sync())
 
 # настройки для работы запросов
 app.add_middleware(

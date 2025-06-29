@@ -223,7 +223,7 @@ async def sync_to_google_sheets():
 
         # users_data
         try:
-            async with db.execute("SELECT * FROM users_data") as cursor:
+            async with db.execute("    SELECT user_id, user_name, company, state, from_manager, entry_time FROM users_data") as cursor:
                 users = await cursor.fetchall()
             header = ["user_id", "user_name", "company", "state", "from_manager", "entry_time"]
             data = [[str(r) if r is not None else "" for r in row] for row in users]
@@ -300,7 +300,7 @@ async def sync_to_google_sheets():
         except Exception as e:
             print(f"[❌] Ошибка user_questions: {e}")
 
-async def periodic_sync(interval: int = 9000):  # 900 сек = 15 мин
+async def periodic_sync(interval: int = 7200):  # 900 сек = 15 мин
     while True:
         await asyncio.sleep(interval)
         try:
@@ -368,7 +368,7 @@ async def add_or_update_message(user_id: int, message: str) -> None:
 
 
 
-MAX_CHARS = 20_000
+MAX_CHARS = 15_000
 TRUNCATION_NOTE = "[диалог обрезан, показан только конец]\n\n"
 
 
