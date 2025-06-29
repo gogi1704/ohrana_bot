@@ -7,7 +7,8 @@ import aiosqlite
 import os
 from dotenv import load_dotenv
 from gspread_asyncio import AsyncioGspreadClientManager
-
+from datetime import datetime
+from typing import List
 
 load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +27,8 @@ def get_sheet():
         "messages": sheet.worksheet("messages"),
         "message_links": sheet.worksheet("message_links"),
         "api_keys": sheet.worksheet("api_keys"),
+        "last_buttons": sheet.worksheet("last_buttons"),
+        "user_reply_states": sheet.worksheet("user_reply_states"),
         "user_questions": sheet.worksheet("user_questions"),
     }
 
@@ -111,6 +114,17 @@ async def init_db():
         except aiosqlite.OperationalError as e:
             if "duplicate column name" not in str(e):
                 raise  # Только если колонка уже есть — игнорируем
+        try:
+            await db.execute("ALTER TABLE users_data ADD COLUMN from_manager TEXT DEFAULT NULL")
+        except aiosqlite.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise  # Только если колонка уже есть — игнорируем
+        try:
+            await db.execute(" ALTER TABLE users_data ADD COLUMN entry_time TEXT DEFAULT NULL")
+        except aiosqlite.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise  # Только если колонка уже есть — игнорируем
+
 
         await db.commit()
     await sync_from_google_sheets()
@@ -123,6 +137,8 @@ async def sync_from_google_sheets():
         await db.execute("DELETE FROM message_links")
         await db.execute("DELETE FROM api_keys")
         await db.execute("DELETE FROM user_questions")
+        await db.execute("DELETE FROM last_buttons")
+        await db.execute("DELETE FROM user_reply_states")
 
         api_keys = sheets["api_keys"].get_all_values()[1:]  # пропустить заголовок
         for row in api_keys:
@@ -135,10 +151,10 @@ async def sync_from_google_sheets():
         # users_data
         users = sheets["users_data"].get_all_values()[1:]
         for row in users:
-            user_id, user_name, company, state = row
+            user_id, user_name, company, state, from_manager, entry_time = row
             await db.execute(
-                "INSERT INTO users_data (user_id, user_name, company, state) VALUES (?, ?, ?, ?)",
-                (int(user_id), user_name, company, state)
+                "INSERT INTO users_data (user_id, user_name, company, state, from_manager, entry_time) VALUES (?, ?, ?, ?, ?, ?)",
+                (int(user_id), user_name, company, state, from_manager, entry_time)
             )
 
         # messages
@@ -167,6 +183,25 @@ async def sync_from_google_sheets():
                 "INSERT INTO user_questions (user_id, question) VALUES (?, ?)",
                 (int(user_id), int(question))
             )
+
+        # last_buttons
+        buttons = sheets["last_buttons"].get_all_values()[1:]
+        for row in buttons:
+            user_id, message_id, text = row
+            await db.execute(
+                "INSERT INTO last_buttons (user_id, message_id, text) VALUES (?, ?, ?)",
+                (int(user_id), int(message_id), str(text))
+            )
+
+        # user_reply_states
+        states = sheets["user_reply_states"].get_all_values()[1:]
+        for row in states:
+            user_id, manager_msg_id = row
+            await db.execute(
+                "INSERT INTO user_reply_states (user_id, manager_msg_id) VALUES (?, ?)",
+                (int(user_id), int(manager_msg_id))
+            )
+
         await db.commit()
 
 async def sync_to_google_sheets():
@@ -188,9 +223,9 @@ async def sync_to_google_sheets():
 
         # users_data
         try:
-            async with db.execute("SELECT * FROM users_data") as cursor:
+            async with db.execute("    SELECT user_id, user_name, company, state, from_manager, entry_time FROM users_data") as cursor:
                 users = await cursor.fetchall()
-            header = ["user_id", "user_name", "company", "state"]
+            header = ["user_id", "user_name", "company", "state", "from_manager", "entry_time"]
             data = [[str(r) if r is not None else "" for r in row] for row in users]
             sheet = sheets["users_data"]
             sheet.clear()
@@ -238,7 +273,34 @@ async def sync_to_google_sheets():
         except Exception as e:
             print(f"[❌] Ошибка user_questions: {e}")
 
-async def periodic_sync(interval: int = 900):  # 900 сек = 15 мин
+        # last_buttons
+        try:
+            async with db.execute("SELECT * FROM last_buttons") as cursor:
+                rows = await cursor.fetchall()
+            header = ["user_id", "message_id", "text"]
+            data = [[str(row[0]), row[1]] for row in rows]
+            sheet = sheets["last_buttons"]
+            sheet.clear()
+            sheet.update('A1', [header] + data)
+            print("[✅] last_buttons обновлены")
+        except Exception as e:
+            print(f"[❌] Ошибка user_questions: {e}")
+
+
+        # user_reply_states
+        try:
+            async with db.execute("SELECT * FROM user_reply_states") as cursor:
+                rows = await cursor.fetchall()
+            header = ["user_id", "manager_msg_id"]
+            data = [[str(row[0]), row[1]] for row in rows]
+            sheet = sheets["user_reply_states"]
+            sheet.clear()
+            sheet.update('A1', [header] + data)
+            print("[✅] user_questions обновлены")
+        except Exception as e:
+            print(f"[❌] Ошибка user_questions: {e}")
+
+async def periodic_sync(interval: int = 7200):  # 900 сек = 15 мин
     while True:
         await asyncio.sleep(interval)
         try:
@@ -250,13 +312,37 @@ async def periodic_sync(interval: int = 900):  # 900 сек = 15 мин
 
 
 
-async def add_user(user_id: int, user_name: str, company: Optional[str] = None) -> None:
+async def add_user(user_id: int, user_name: Optional[str] = None, company: Optional[str] = None) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO users_data (user_id, user_name, company) VALUES (?, ?, ?)",
-            (user_id, user_name, company)
-        )
+        # Заготовим список обновляемых полей
+        updates = []
+        params = []
+
+        if user_name is not None:
+            updates.append("user_name = ?")
+            params.append(user_name)
+
+        if company is not None:
+            updates.append("company = ?")
+            params.append(company)
+
+        if updates:
+            update_clause = ", ".join(updates)
+            # Вставка или обновление только нужных полей
+            await db.execute(f"""
+                INSERT INTO users_data (user_id)
+                VALUES (?)
+                ON CONFLICT(user_id) DO UPDATE SET {update_clause}
+            """, [user_id] + params)
+
+        else:
+            # Если нет полей для обновления — просто вставляем user_id
+            await db.execute("""
+                INSERT OR IGNORE INTO users_data (user_id) VALUES (?)
+            """, (user_id,))
+
         await db.commit()
+
 
 async def get_user_name(user_id: int) -> Optional[str]:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -280,11 +366,25 @@ async def add_or_update_message(user_id: int, message: str) -> None:
         await db.commit()
 
 
+
+
+MAX_CHARS = 15_000
+TRUNCATION_NOTE = "[диалог обрезан, показан только конец]\n\n"
+
+
 async def get_history_by_id(user_id: int) -> List[str]:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT message FROM messages WHERE user_id = ?", (user_id,)) as cursor:
             rows = await cursor.fetchall()
-            return [row[0] for row in rows]
+            result = []
+
+            for row in rows:
+                text = row[0]
+                if len(text) <= MAX_CHARS:
+                    result.append(text)
+                else:
+                    result.append(TRUNCATION_NOTE + text[-MAX_CHARS:])
+            return result
 
 
 async def remove_history_by_id(user_id: int) -> None:
@@ -365,6 +465,19 @@ async def get_user_questions(user_id: int) -> Optional[List[str]]:
 async def delete_user_questions(user_id: int) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM user_questions WHERE user_id = ?", (user_id,))
+        await db.commit()
+
+async def save_user_entry(user_id, from_manager):
+    entry_date = datetime.now().strftime("%d.%m.%Y")  # ← формат: 10.02.2025
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO users_data (user_id, from_manager, entry_time)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET 
+                from_manager = excluded.from_manager,
+                entry_time = excluded.entry_time
+        """, (user_id, from_manager, entry_date))
         await db.commit()
 
 

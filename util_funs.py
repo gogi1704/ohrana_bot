@@ -5,6 +5,7 @@ import resources
 import json
 import html
 import re
+from collections import Counter
 
 
 def download_gdoc(url: str) :
@@ -145,4 +146,108 @@ def highlight(text: str, style: str = "bold", mode: str = "HTML") -> str:
 
     else:
         return text  # если mode неизвестен — вернём без изменений
+
+def get_prikaz_29_punkts_from_name(name):
+    final_res = []
+    # Абсолютный путь к текущему файлу (util_funs.py)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(current_dir, 'docs', 'dogma_full_dump.json')
+
+    # Проверка, существует ли файл
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"Файл не найден по пути: {file_path}")
+
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    result = []
+    query = name.lower()
+
+    for key, items in data.items():
+        if query.lower() in key.lower():
+            result.extend(items)
+
+    for item in result:
+        final_res.append(item["пункт_приказа"])
+
+    return final_res
+
+
+def get_doctors_by_punkts(points):
+    doctors = set()
+    tests = set()
+    # Абсолютный путь к текущему файлу (util_funs.py)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Путь до корня проекта (если util_funs.py лежит в корне проекта, то current_dir — уже корень)
+    file_path = os.path.join(current_dir, 'docs', 'table_prilozhenie_1.json')
+
+    # Проверка, существует ли файл
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"Файл не найден по пути: {file_path}")
+
+    with open(file_path, 'r', encoding='utf-8') as f:
+       json_data = json.load(f)
+
+    # Убираем "п." и пробелы для корректного сравнения
+    cleaned_points = [p.replace("п.", "").strip('.') for p in points]
+
+    for item in json_data:
+        n_pp_clean = item.get("N п/п", "").strip()
+        if n_pp_clean in cleaned_points:
+            # Добавляем врачей
+            doctor_field = item.get("Участие врачей-специалистов", "")
+            if doctor_field:
+                doctors.update(line.strip() for line in doctor_field.split('\n') if line.strip())
+
+            # Добавляем исследования
+            tests_field = item.get("Лабораторные и функциональные исследования", "")
+            if tests_field:
+                tests.update(line.strip() for line in tests_field.split('\n') if line.strip())
+
+    return list(doctors), list(tests)
+
+
+
+def normalize(text):
+    return text.strip().lower()
+
+def get_unique_counts_safe(nested_lists):
+    flat_list = [
+        item.strip() for sublist in nested_lists
+        for item in sublist
+        if isinstance(item, str) and item.strip()
+    ]
+
+    normalized_map = {}
+    for item in flat_list:
+        key = normalize(item)
+        if key not in normalized_map:
+            normalized_map[key] = item.strip()  # Сохраняем первое "нормальное" представление
+
+    # Подсчёт количества по нормализованным значениям
+    counts = Counter(normalize(item) for item in flat_list)
+
+    # Финальное представление: уникальные нормализованные значения (с заглавной буквы) и количество
+    unique_items = [normalized_map[k].capitalize() for k in counts]
+    counted_items = {normalized_map[k].capitalize(): v for k, v in counts.items()}
+
+    return unique_items, counted_items
+
+def get_base_doctors_or_tests(peoples_group, count):
+    result = {item: count for item in peoples_group}
+    return result
+
+def get_text_test_or_doctors(start_text, list_doctors_or_tests):
+
+    for item, count in list_doctors_or_tests.items():
+        start_text += f"– {item}: {count} шт.\n"
+
+    return start_text
+
+
+
+# points = get_prikaz_29_punkts_from_name("автоклавер | больницы")
+# print(get_doctors_by_punkts(points))
+
 

@@ -1,4 +1,4 @@
-from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton , InlineKeyboardButton, WebAppInfo
 import resources
 
 base_keyboard_to_life_question = [[KeyboardButton("Житейские вопросы")]]
@@ -97,5 +97,10 @@ QUESTION_DATA = {
     for j in range(1, 8)  # макс. 7 вопросов на категорию
     if resources.life_questions.get(f"category_{i}_que_{j}") is not None
 }
+
+web_app_keys = [
+    [KeyboardButton("Выбрать из списка", web_app=WebAppInfo(url=resources.web_app_url))]
+]
+web_app_keyboard = ReplyKeyboardMarkup(web_app_keys)
 
 
