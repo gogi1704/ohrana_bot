@@ -92,13 +92,13 @@ async def transfer_get_date(request: AnswerRequest):
     except Exception as e:
         return {"message": "Error "+ str(e)}
 
-@app.post("/api/manager_human_dialog")
-async def manager_human_dialog(request: AnswerRequest):
-    try:
-        consult_answer = await main.manager_human_dialog(user_id= request.user_id,user_say= request.text_answer)
-        return {"message": consult_answer}
-    except Exception as e:
-        return {"message": "Error "+ str(e)}
+# @app.post("/api/manager_human_dialog")
+# async def manager_human_dialog(request: AnswerRequest):
+#     try:
+#         consult_answer = await main.manager_human_dialog(user_id= request.user_id,user_say= request.text_answer)
+#         return {"message": consult_answer}
+#     except Exception as e:
+#         return {"message": "Error "+ str(e)}
 
 @app.post("/api/get_final_question")
 async def get_final_question(request: AnswerRequest):

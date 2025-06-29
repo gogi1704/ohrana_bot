@@ -3,7 +3,7 @@ import util_funs
 from resources import tg_states , get_state_complete_key, get_url_by_command
 from util_funs import send_request, highlight
 from telegram import Update,  Message
-from db.user_history_db import save_message_link, get_user_id_by_group_message, get_user_name, delete_last_button, get_last_button, save_last_button, get_life_que_keyboard , save_life_que_keyboard , save_user_reply_state, get_user_reply_state, delete_user_reply_state
+from db.user_history_db import save_message_link, get_user_id_by_group_message, get_user_name, delete_last_button, get_last_button, save_last_button, get_life_que_keyboard , save_life_que_keyboard , save_user_reply_state, get_user_reply_state, delete_user_reply_state, save_user_entry
 from telegram.ext import (ContextTypes, CallbackContext, ConversationHandler)
 from telegram.constants import ChatAction
 from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
@@ -25,6 +25,7 @@ async def start(update, context)->int:
     payload = {"text_answer":"ok",
                "user_id":user_id
                }
+
     text = await send_request(url=get_url_by_command(api_command= "start") , payload= payload)
 
     if text == "empty":
@@ -40,11 +41,22 @@ async def start(update, context)->int:
         answer = resources.get_start_text_with_name(user_name= text)
 
         if update.message:
-            # await update.message.reply_text(answer, reply_markup= to_question_keyboard )
             await update.message.reply_text(answer, reply_markup=to_life_question_keyboard)
         elif update.callback_query:
-            # await update.callback_query.message.reply_text(answer, reply_markup= to_question_keyboard )
             await update.callback_query.message.reply_text(answer, reply_markup=to_life_question_keyboard)
+
+    args = context.args  # Здесь будут параметры после /start
+    utm_code = args[0] if args else None
+    print(utm_code)
+    if utm_code is not None:
+        await save_user_entry(user_id, utm_code)
+
+
+async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message and update.message.web_app_data:
+        data = update.message.web_app_data.data
+        print("📨 Получены данные из WebApp:", data)
+        await update.message.reply_text(f"Вы выбрали: {data}")
 
 async def handle_message(update, context) -> int:
     text_message = update.message.text
@@ -89,8 +101,8 @@ async def handle_message(update, context) -> int:
     elif current_state == tg_states['transfer']:
         await handle_transfer(update, context, payload, user_id)
 
-    elif current_state == tg_states['manager_human']:
-        await handle_manager_human(update, context, payload, user_id)
+    # elif current_state == tg_states['manager_human']:
+    #     await handle_manager_human(update, context, payload, user_id)
 
 
 async def handle_hello(update, context, payload,user_id) -> int:
@@ -202,9 +214,9 @@ async def handle_transfer(update, context, payload,user_id) -> int:
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
-async def handle_manager_human(update, context, payload,user_id) -> int:
-    text = await send_request(url=get_url_by_command(api_command="manager_human_dialog"),
-                              payload=payload)
+# async def handle_manager_human(update, context, payload,user_id) -> int:
+#     text = await send_request(url=get_url_by_command(api_command="manager_human_dialog"),
+#                               payload=payload)
 
     if text == "que_exit":
         await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})

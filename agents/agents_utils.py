@@ -10,7 +10,7 @@ import db.user_history_db as db
 
 load_dotenv()
 
-model_gpt4o_mini = "gpt-4.1-2025-04-14"
+model_gpt4o_mini = "gpt-4.1-mini-2025-04-14"
 model_gpt_4o = "gpt-4o-2024-08-06"
 env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 def update_openai_api_key(new_key: str, env_path: str = env_path):
@@ -76,16 +76,15 @@ def get_chunks(user_question, chunks_count= 3):
 
 async def get_chunks_filtered(user_question: str):
     vector_store = get_vector_store()
-    results = vector_store.similarity_search_with_score(user_question, k=8)  # k - количество топ-результатов
+    results = vector_store.similarity_search_with_score(user_question, k=6)  # k - количество топ-результатов
     threshold = 0.3
     filtered_chunks = [doc.page_content for doc, score in results if score < threshold]
     return filtered_chunks
 
 
-
 async def get_gpt_answer(system_prompt, user_prompt):
     keys = await db.get_active_keys()
-    answer = "Empty_keys"
+    answer = "api_error_Empty_keys"
     for key in keys:
         update_openai_api_key(new_key= key)
         load_dotenv(override=True)

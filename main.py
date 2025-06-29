@@ -1,11 +1,9 @@
 import asyncio
 
 import util_funs
-# from util_funs import convert_rtf_to_docx, extract_tables_and_text
 import re
-import os
 from agents.agent_prompts import *
-from agents.agents_utils import get_gpt_answer, make_vector_store, get_chunks, get_chunks_filtered , get_question_category
+from agents.agents_utils import get_gpt_answer, make_vector_store, get_chunks_filtered , get_question_category
 import resources
 import db.user_history_db as data_base
 
@@ -19,9 +17,8 @@ async def init_docs():
 
 async def start(user_id):
     user_name = await data_base.get_user_name(user_id)
-    await data_base.remove_history_by_id(user_id)
     if user_name:
-        await data_base.add_or_update_message(user_id, f"Я сказал: {resources.get_start_text_with_name(user_name)}")
+        await data_base.add_or_update_message(user_id, f"Я сказал: {resources.start_text_without_name_to_dialog}")
         return user_name
     else:
         await data_base.add_user(user_id= user_id,user_name= "new_account")
@@ -166,46 +163,6 @@ async def transfer_get_date(user_id, user_say):
     await data_base.add_or_update_message(user_id= user_id,
                                     message= "\n".join(dialog_text))
     return get_date_answer
-
-async def manager_human_dialog(user_id, user_say):
-    dialog_text = await data_base.get_history_by_id(user_id)
-    dialog_text.append(f"Пользователь сказал : {user_say}.\n")
-    questions_list = await data_base.get_user_questions(user_id)
-
-    if questions_list is None:
-        user_prompt_get_questions_list = manager_human_make_questions_list_user_prompt.format(user_que= user_say)
-        questions_list = await get_gpt_answer(system_prompt=manager_human_make_questions_list_system_prompt, user_prompt= user_prompt_get_questions_list)
-        print(questions_list)
-        await data_base.save_user_questions(user_id= user_id,questions= questions_list)
-
-    if questions_list != "que_exit":
-        user_prompt_manager_human_dialog = manager_human_dialog_user_prompt.format(dialog = "\n".join(dialog_text), questions = questions_list)
-        question_to_user = await get_gpt_answer(system_prompt=manager_human_dialog_system_prompt,user_prompt= user_prompt_manager_human_dialog)
-
-        checker_user_prompt = manager_human_checker_answers_user_prompt.format(dialog = "\n".join(dialog_text), questions = questions_list)
-        checker = await get_gpt_answer(system_prompt= manager_human_checker_answers_system_prompt, user_prompt= checker_user_prompt)
-
-        if question_to_user == "que_exit":
-            dialog_text.clear()
-            dialog_text.append(f"Консультант сказал : {resources.human_manager_exit_text}.")
-            result = "que_exit"
-
-        elif checker == "complete":
-            dialog_text.append(f"Консультант сказал : {resources.human_manager_complete_text}.")
-            result = "que_complete"
-
-        else:
-            result = question_to_user
-
-
-
-    else:
-        result = "que_exit"
-
-    await data_base.add_or_update_message(user_id= user_id,
-                                    message= "\n".join(dialog_text))
-
-    return result
 
 async def get_final_question(user_id, user_say):
     dialog_text = await data_base.get_history_by_id(user_id)
