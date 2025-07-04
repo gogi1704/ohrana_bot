@@ -12,7 +12,7 @@ async def restart_user_inactivity_timers(context, update, user_id):
         async def message_1_timer():
             try:
                 print("timer_1_start")
-                await sleep(30)  # замените на 300 для реальных 5 минут
+                await sleep(300)  # замените на 300 для реальных 5 минут
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
                     text=resources.five_minutes_text,
@@ -51,7 +51,7 @@ async def restart_user_inactivity_timers(context, update, user_id):
         async def message_2_timer():
             try:
                 print("timer_2_start (через активность)")
-                await sleep(30)
+                await sleep(300)
                 await handle_to_life_questions(update, context)
                 await mark_message_sent(user_id, "message_2")
             except asyncio.CancelledError:
