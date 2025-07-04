@@ -4,11 +4,12 @@ from resources import tg_states , get_state_complete_key, get_url_by_command
 from util_funs import send_request, highlight
 from telegram import Update,  Message
 from db.user_history_db import save_message_link, get_user_id_by_group_message, get_user_name, delete_last_button, get_last_button, save_last_button, get_life_que_keyboard , save_life_que_keyboard , save_user_reply_state, get_user_reply_state, delete_user_reply_state, save_user_entry
-from telegram.ext import (ContextTypes, CallbackContext, ConversationHandler)
+from telegram.ext import (ContextTypes, ConversationHandler)
 from telegram.constants import ChatAction
-from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from tg import tg_keyboards as keyboards
 import asyncio
+import  tg.tg_bot_timer as tg_timer
 
 REPLY_TO_MANAGER = range(1)
 
@@ -89,8 +90,8 @@ async def handle_message(update, context) -> int:
     elif current_state == tg_states['company']:
         await handle_company(update, context, payload, user_id)
 
-    elif current_state == tg_states['prev_consult']:
-        await handle_prev_consult(update, context, payload, user_id)
+    # elif current_state == tg_states['prev_consult']:
+    #     await handle_prev_consult(update, context, payload, user_id)
 
     elif current_state == tg_states['consult']:
         await handle_consult(update, context, payload, user_id)
@@ -123,19 +124,21 @@ async def handle_company(update, context, payload,user_id) -> int:
     user_name = await get_user_name(user_id=int(user_id))
 
     if text == get_state_complete_key(state="company"):
-        await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['prev_consult']})
+        await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
+        await tg_timer.restart_user_inactivity_timers(update= update, context= context, user_id= user_id)
         text = resources.get_first_text_after_hello_true(user_name=user_name)
     await context.bot.send_message(chat_id=update.effective_chat.id, text= text)
 
-async def handle_prev_consult(update, context, payload,user_id) -> int:
-    text = await send_request(url=get_url_by_command(api_command= "get_prev_consult" ),
-                              payload=payload)
-    if text == get_state_complete_key(state="prev_consult"):
-        await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
-        text = resources.prev_consult_text
-    await context.bot.send_message(chat_id=update.effective_chat.id, text= text)
+# async def handle_prev_consult(update, context, payload,user_id) -> int:
+#     text = await send_request(url=get_url_by_command(api_command= "get_prev_consult" ),
+#                               payload=payload)
+#     if text == get_state_complete_key(state="prev_consult"):
+#         await send_request(get_url_by_command("update_state"), {"user_id": user_id, "state": tg_states['consult']})
+#         text = resources.prev_consult_text
+#     await context.bot.send_message(chat_id=update.effective_chat.id, text= text)
 
 async def handle_consult(update, context, payload,user_id) -> int:
+    await tg_timer.restart_user_inactivity_timers(update= update, context= context, user_id= user_id)
     text = await send_request(url=get_url_by_command(api_command="get_consult"),
                               payload=payload)
     if text == tg_states["manager"]:
@@ -161,9 +164,13 @@ async def handle_consult(update, context, payload,user_id) -> int:
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("Отправить менеджеру", callback_data=f"send_answer|{user_id}")]
         ])
-        result = f"{text}\n\n{highlight(text= 'Ответ сформирован с помощью сети интернет. Если вы не доверяете этому ответу , и хотите получить информацию от нашего менеджера, то нажмите соответствующую кнопку.',
-                                        style= 'italic',
-                                        mode= 'HTML')}"
+        comment = highlight(
+            text="Ответ сформирован с помощью сети интернет. Если вы не доверяете этому ответу, и хотите получить информацию от нашего менеджера, то нажмите соответствующую кнопку.",
+            style="italic",
+            mode="HTML"
+        )
+
+        result = f"{text}\n\n{comment}"
 
         sent = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -424,13 +431,13 @@ async def handle_all_questions_buttons(update, context):
 
 async def handle_to_life_questions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id  # Работает и для сообщений, и для кнопок
-    text = "⬇️Выберите раздел⬇️"
+
     keyboard = life_categories_question_keyboard
 
     # Если это обычное сообщение — лучше ответить на него
     if update.message:
-        await update.message.reply_text(text, reply_markup=keyboard)
+        await update.message.reply_text(resources.ten_minutes_text, reply_markup=keyboard)
 
     # Если это callback кнопка — отправим новое сообщение (или можно редактировать старое)
     elif update.callback_query:
-        await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
+        await context.bot.send_message(chat_id=chat_id, text=resources.ten_minutes_text, reply_markup=keyboard)

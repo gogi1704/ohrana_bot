@@ -2,8 +2,9 @@ from telegram.ext import Application,CommandHandler, MessageHandler, filters, Ca
 from dotenv import load_dotenv
 import os
 from tg.tg_bot_navigation import start, handle_message, handle_manager_reply, handle_send_answer, handle_to_life_questions, handle_all_questions_buttons, handle_reply_button_pressed, handle_user_text_reply, handle_web_app_data
-import resources
+from telegram import BotCommand
 from tg.tg_bot_navigation_make_prof_list import *
+import asyncio
 
 
 load_dotenv()
@@ -20,10 +21,16 @@ REPLY_TO_MANAGER = range(1)
     PROFESSION_MENU
 ) = range(8)
 
+async def set_bot_commands(application):
+    commands = [
+        BotCommand("start", "Перезапуск"),
+    ]
+    await application.bot.set_my_commands(commands)
 
 def main():
     application = Application.builder().token(TOKEN).concurrent_updates(True).build()
     print('Бот запущен...')
+    asyncio.get_event_loop().run_until_complete(set_bot_commands(application))
 
     start_handler = CommandHandler('start', start, block=False)
 

@@ -3,7 +3,7 @@ from telegram.ext import (Application, CommandHandler, MessageHandler, CallbackQ
                           ContextTypes, ConversationHandler, filters)
 
 import resources
-import tg_bot_navigation
+from tg import tg_bot_navigation
 from tg.tg_keyboards import web_app_keyboard
 from util_funs import get_prikaz_29_punkts_from_name, get_doctors_by_punkts, get_unique_counts_safe, get_base_doctors_or_tests, get_text_test_or_doctors
 
@@ -149,18 +149,24 @@ async def profession_menu_handler(update: Update, context: ContextTypes.DEFAULT_
 
         _,summary = get_unique_counts_safe(final_list)
         # summary_text = "Итоговый список:\n\n"
+        text1 = get_text_test_or_doctors("Общие специалисты:\n", base_doctors_list_all)
+        text2 = get_text_test_or_doctors("Специалисты для женщин:\n", base_doctors_list_women)
+        text3 = get_text_test_or_doctors("Специалисты для мужчин старше 40 лет:\n", base_doctors_list_men_40)
+        text4 = get_text_test_or_doctors("Специалисты для женщин старше 40 лет:\n", base_doctors_list_women_40)
+        text5 = get_text_test_or_doctors("Общие обследования:\n", base_tests_list_all)
+        text6 = get_text_test_or_doctors("Обследования для женщин старше 40 лет:\n", base_tests_list_women_40)
+        text7 = get_text_test_or_doctors("Обследования для мужчин старше 40 лет:\n", base_tests_list_men_40)
+        text8 = get_text_test_or_doctors("Дополнительные обследования по вредностям:\n", summary)
 
-        summary_text =f"""
-♦️{get_text_test_or_doctors(start_text="Общие специалисты:\n", list_doctors_or_tests= base_doctors_list_all)}
-♦️{get_text_test_or_doctors(start_text="Специалисты для женщин:\n", list_doctors_or_tests= base_doctors_list_women)}
-♦️{get_text_test_or_doctors(start_text="Специалисты для мужчин старше 40 лет:\n", list_doctors_or_tests= base_doctors_list_men_40)}
-♦️{get_text_test_or_doctors(start_text="Специалисты для женщин старше 40 лет:\n", list_doctors_or_tests= base_doctors_list_women_40)}
-♦️{get_text_test_or_doctors(start_text="Общие обследования:\n", list_doctors_or_tests= base_tests_list_all)}
-♦️{get_text_test_or_doctors(start_text="Обследования для женщин старше 40 лет:\n", list_doctors_or_tests= base_tests_list_women_40)}
-♦️{get_text_test_or_doctors(start_text="Обследования для мужчин старше 40 лет:\n", list_doctors_or_tests= base_tests_list_men_40)}
-        
-        
-♦️{get_text_test_or_doctors(start_text="Дополнительные обследования по вредностям:\n", list_doctors_or_tests= summary)}
+        summary_text = f"""
+        ♦️{text1}
+        ♦️{text2}
+        ♦️{text3}
+        ♦️{text4}
+        ♦️{text5}
+        ♦️{text6}
+        ♦️{text7}
+        ♦️{text8}
         """
 
         # for item, count in summary.items():
