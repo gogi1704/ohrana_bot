@@ -119,11 +119,9 @@ async def manager_get_info(user_id, user_say):
                                        user_prompt=user_prompt)
     if manager_say == "manager_stop":
         manager_answer = "manager_stop"
-        dialog_text.clear()
         dialog_text.append(f"Консультант сказал : {resources.stop_manager_text}.\n")
     elif "manager_complete" in manager_say:
         manager_answer = manager_say
-        dialog_text.clear()
         dialog_text.append(f"Консультант сказал : {resources.complete_manager_text}.\n")
     else:
         manager_answer = manager_say
@@ -132,18 +130,6 @@ async def manager_get_info(user_id, user_say):
     await data_base.add_or_update_message(user_id= user_id,
                                     message= "\n".join(dialog_text))
     return manager_answer
-
-async def get_prev_consult_answer(user_id,user_say):
-    dialog_text = await data_base.get_history_by_id(user_id)
-    dialog_text.append(f"Пользователь сказал : {user_say}.\n")
-    user_prompt = prev_consult_user_prompt.format(user_say = user_say, dialog = "\n".join(dialog_text))
-    prev_consult_answer = await get_gpt_answer(system_prompt= prev_consult_system_prompt,
-                                               user_prompt= user_prompt)
-    if prev_consult_answer == resources.get_state_complete_key(state= "prev_consult"):
-        dialog_text.append(f"Консультант сказал : {resources.prev_consult_text}.")
-    else:
-        dialog_text.append(f"Консультант сказал : {prev_consult_answer}.\n")
-    return prev_consult_answer
 
 async def transfer_get_date(user_id, user_say):
     dialog_text = await data_base.get_history_by_id(user_id)
@@ -155,11 +141,9 @@ async def transfer_get_date(user_id, user_say):
         result, date = parsed
 
         if result == "complete":
-            dialog_text.clear()
             dialog_text.append(f"Консультант сказал : {resources.transfer_complete_text}.")
 
         elif result == "error":
-            dialog_text.clear()
             dialog_text.append(f"Консультант сказал : {resources.transfer_error_text}.\n")
 
     await data_base.add_or_update_message(user_id= user_id,
@@ -194,6 +178,13 @@ async def get_company(user_id,user_say):
         await data_base.add_user(user_id = user_id,
                                  user_name= user_name,
                                  company= "Отказ давать данные")
+        await data_base.remove_history_by_id(user_id)
+        return resources.get_state_complete_key(state= "company")
+
+    elif company_info == "company_none":
+        await data_base.add_user(user_id = user_id,
+                                 user_name= user_name,
+                                 company= "нет компании")
         await data_base.remove_history_by_id(user_id)
         return resources.get_state_complete_key(state= "company")
 

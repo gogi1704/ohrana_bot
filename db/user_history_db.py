@@ -120,7 +120,19 @@ async def init_db():
             if "duplicate column name" not in str(e):
                 raise  # Только если колонка уже есть — игнорируем
         try:
-            await db.execute(" ALTER TABLE users_data ADD COLUMN entry_time TEXT DEFAULT NULL")
+            await db.execute("ALTER TABLE users_data ADD COLUMN entry_time TEXT DEFAULT NULL")
+        except aiosqlite.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise  # Только если колонка уже есть — игнорируем
+
+        try:
+            await db.execute("ALTER TABLE users_data ADD COLUMN message_1_sent  BOOLEAN DEFAULT FALSE")
+        except aiosqlite.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise  # Только если колонка уже есть — игнорируем
+
+        try:
+            await db.execute("ALTER TABLE users_data ADD COLUMN message_2_sent  BOOLEAN DEFAULT FALSE")
         except aiosqlite.OperationalError as e:
             if "duplicate column name" not in str(e):
                 raise  # Только если колонка уже есть — игнорируем
@@ -151,10 +163,10 @@ async def sync_from_google_sheets():
         # users_data
         users = sheets["users_data"].get_all_values()[1:]
         for row in users:
-            user_id, user_name, company, state, from_manager, entry_time = row
+            user_id, user_name, company, state, from_manager, entry_time, message_1_sent, message_2_sent = row
             await db.execute(
-                "INSERT INTO users_data (user_id, user_name, company, state, from_manager, entry_time) VALUES (?, ?, ?, ?, ?, ?)",
-                (int(user_id), user_name, company, state, from_manager, entry_time)
+                "INSERT INTO users_data (user_id, user_name, company, state, from_manager, entry_time, message_1_sent, message_2_sent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (int(user_id), user_name, company, state, from_manager, entry_time, message_1_sent, message_2_sent)
             )
 
         # messages
@@ -223,9 +235,9 @@ async def sync_to_google_sheets():
 
         # users_data
         try:
-            async with db.execute("    SELECT user_id, user_name, company, state, from_manager, entry_time FROM users_data") as cursor:
+            async with db.execute("SELECT user_id, user_name, company, state, from_manager, entry_time, message_1_sent, message_2_sent FROM users_data") as cursor:
                 users = await cursor.fetchall()
-            header = ["user_id", "user_name", "company", "state", "from_manager", "entry_time"]
+            header = ["user_id", "user_name", "company", "state", "from_manager", "entry_time", "message_1_sent", "message_2_sent"]
             data = [[str(r) if r is not None else "" for r in row] for row in users]
             sheet = sheets["users_data"]
             sheet.clear()
@@ -557,6 +569,17 @@ async def delete_user_reply_state(user_id: int):
             "DELETE FROM user_reply_states WHERE user_id = ?",
             (user_id,)
         )
+        await db.commit()
+
+async def is_message_sent(user_id: int, message: str) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(f"SELECT {message}_sent FROM users_data WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row and row[0] == 1
+
+async def mark_message_sent(user_id: int, message: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(f"UPDATE users_data SET {message}_sent = 1 WHERE user_id = ?", (user_id,))
         await db.commit()
 
 
