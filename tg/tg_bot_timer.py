@@ -1,9 +1,10 @@
 from asyncio import create_task, sleep
 import resources
 from db.user_history_db import *
-from tg_bot_navigation import handle_to_life_questions
+
 
 async def restart_user_inactivity_timers(context, update, user_id):
+    from tg_bot_navigation import handle_to_life_questions
     await cancel_user_timers(user_id)
     resources.user_timers[user_id] = {}
 
@@ -21,7 +22,7 @@ async def restart_user_inactivity_timers(context, update, user_id):
 
                 dialog = await get_history_by_id(user_id)
                 dialog.append(f"Консультант сказал : {resources.five_minutes_text}")
-                await add_or_update_message(user_id=user_id, message="")
+                await add_or_update_message(user_id=user_id, message="\n".join(dialog))
                 await mark_message_sent(user_id, "message_1")
 
                 # === Запускаем message_2 (если ещё не отправлено)
@@ -29,7 +30,7 @@ async def restart_user_inactivity_timers(context, update, user_id):
                     async def message_2_timer():
                         try:
                             print("timer_2_start")
-                            await sleep(30)  # замените на 300 для реальных 5 минут
+                            await sleep(300)  # замените на 300 для реальных 5 минут
                             await handle_to_life_questions(update, context)
                             await mark_message_sent(user_id, "message_2")
                         except asyncio.CancelledError:
@@ -51,7 +52,7 @@ async def restart_user_inactivity_timers(context, update, user_id):
         async def message_2_timer():
             try:
                 print("timer_2_start (через активность)")
-                await sleep(300)
+                await sleep(600) # замените на 600 для реальных 10 минут
                 await handle_to_life_questions(update, context)
                 await mark_message_sent(user_id, "message_2")
             except asyncio.CancelledError:

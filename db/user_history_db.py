@@ -377,6 +377,11 @@ async def add_or_update_message(user_id: int, message: str) -> None:
 
         await db.commit()
 
+async def get_all_user_ids():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT DISTINCT user_id FROM users_data") as cursor:
+            return [row[0] async for row in cursor]
+
 
 
 

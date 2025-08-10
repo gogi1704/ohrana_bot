@@ -17,14 +17,15 @@ async def init_docs():
 
 async def start(user_id):
     user_name = await data_base.get_user_name(user_id)
+    dialog_text = await data_base.get_history_by_id(user_id)
     if user_name:
-        dialog_text = await data_base.get_history_by_id(user_id)
         dialog_text.append(f"Консультант сказал : {resources.start_text_without_name_to_dialog}")
         await data_base.add_or_update_message(user_id, "\n".join(dialog_text))
         return user_name
     else:
         await data_base.add_user(user_id= user_id,user_name= "new_account")
-        await data_base.add_or_update_message(user_id,f"Консультант сказал : {resources.start_text}")
+        dialog_text.append(f"Консультант сказал : {resources.start_text}")
+        await data_base.add_or_update_message(user_id,"\n".join(dialog_text))
         return None
 
 async def get_hello_dialog_answer(user_id, user_say):
@@ -52,9 +53,9 @@ async def get_hello_dialog_answer(user_id, user_say):
         return resources.get_state_complete_key(state= "hello")
 
     else:
-        await data_base.add_user(user_id = user_id,
-                           user_name= user_name_from_dialog)
-        await data_base.add_or_update_message(user_id= user_id, message= resources.get_company_text)
+        await data_base.add_user(user_id = user_id,user_name= user_name_from_dialog)
+        dialog_text.append(f"Консультант сказал: {resources.get_company_text}.\n")
+        await data_base.add_or_update_message(user_id= user_id, message= "\n".join(dialog_text))
         return resources.get_state_complete_key(state= "hello")
 
 async def get_consult_answer(user_id,user_say):
@@ -169,7 +170,7 @@ async def get_company(user_id,user_say):
         agent_answer = await get_gpt_answer(system_prompt= company_dialog_system_prompt,
                                             user_prompt= user_prompt)
 
-        dialog_text.append(f"Я сказал : {agent_answer}.\n")
+        dialog_text.append(f"Консультант : {agent_answer}.\n")
         await data_base.add_or_update_message(user_id=user_id,
                                         message="\n".join(dialog_text))
         return agent_answer
@@ -193,7 +194,8 @@ async def get_company(user_id,user_say):
                                  user_name=user_name,
                                  company= company_info)
         user_name_from_dialog = await data_base.get_user_name(user_id)
-        await data_base.add_or_update_message(user_id= user_id, message= f"Консультант сказал: {resources.get_first_text_after_hello_true(user_name= user_name_from_dialog)}.")
+        dialog_text.append(f"Консультант сказал: {resources.get_first_text_after_hello_true(user_name= user_name_from_dialog)}.")
+        await data_base.add_or_update_message(user_id= user_id, message= "\n".join(dialog_text))
         return resources.get_state_complete_key(state= "company")
 
 async def update_state(user_id, state):

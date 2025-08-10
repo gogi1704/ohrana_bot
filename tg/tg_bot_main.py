@@ -5,6 +5,7 @@ from tg.tg_bot_navigation import start, handle_message, handle_manager_reply, ha
 from telegram import BotCommand
 from tg.tg_bot_navigation_make_prof_list import *
 import asyncio
+from tg.tg_bot_channel_funs import handle_channel_post
 
 
 load_dotenv()
@@ -36,6 +37,8 @@ def main():
 
     text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message, block=False)
     manager_handler = MessageHandler(filters.Chat(int(resources.GROUP_CHAT_ID)) & filters.REPLY, handle_manager_reply)
+    channel_handler = MessageHandler(filters.ChatType.CHANNEL, handle_channel_post)
+
     button_to_life_question_handler = MessageHandler(filters.TEXT & filters.Regex("^Житейские вопросы$"), handle_to_life_questions)
 
     button_send_answer_handler = CallbackQueryHandler(handle_send_answer, pattern=r"^send_answer\|")
@@ -80,6 +83,7 @@ def main():
 
     application.add_handler(button_to_life_question_handler)
     application.add_handler(manager_handler)
+    application.add_handler(channel_handler)
     application.add_handler(text_handler)
 
 
