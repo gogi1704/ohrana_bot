@@ -89,3 +89,5 @@ yarl==1.20.0
 gspread==6.0.1
 gspread-asyncio==2.0.0
 oauth2client
+pandas
+openpyxl

@@ -1,6 +1,5 @@
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import (Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-                          ContextTypes, ConversationHandler, filters)
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import (ContextTypes, ConversationHandler)
 
 import resources
 from tg import tg_bot_navigation
@@ -133,10 +132,11 @@ async def profession_menu_handler(update: Update, context: ContextTypes.DEFAULT_
         base_doctors_list_all = get_base_doctors_or_tests(peoples_group= resources.base_doctors_all, count= all_count)
         base_doctors_list_women = get_base_doctors_or_tests(peoples_group=resources.base_doctors_women, count= int(context.user_data['women_total']))
 
-        base_doctors_list_men_40 =get_base_doctors_or_tests(peoples_group= resources.base_doctors_men_40 , count= int(context.user_data['men_40']))
-        base_doctors_list_women_40 = get_base_doctors_or_tests(peoples_group=resources.base_doctors_women_40, count= int(context.user_data['women_40']))
+        # base_doctors_list_men_40 =get_base_doctors_or_tests(peoples_group= resources.base_doctors_men_40 , count= int(context.user_data['men_40']))
+        # base_doctors_list_women_40 = get_base_doctors_or_tests(peoples_group=resources.base_doctors_women_40, count= int(context.user_data['women_40']))
 
         base_tests_list_all = get_base_doctors_or_tests(peoples_group=resources.base_tests_all, count= all_count)
+        base_tests_women = get_base_doctors_or_tests(resources.base_tests_women, count= int(context.user_data['women_total']))
         base_tests_list_women_40 = get_base_doctors_or_tests(peoples_group=resources.base_test_women_40, count= int(context.user_data['women_40']))
         base_tests_list_men_40 = get_base_doctors_or_tests(peoples_group=resources.base_test_men_40, count= int(context.user_data['men_40']))
 
@@ -151,12 +151,13 @@ async def profession_menu_handler(update: Update, context: ContextTypes.DEFAULT_
         # summary_text = "Итоговый список:\n\n"
         text1 = get_text_test_or_doctors("Общие специалисты:\n", base_doctors_list_all)
         text2 = get_text_test_or_doctors("Специалисты для женщин:\n", base_doctors_list_women)
-        text3 = get_text_test_or_doctors("Специалисты для мужчин старше 40 лет:\n", base_doctors_list_men_40)
-        text4 = get_text_test_or_doctors("Специалисты для женщин старше 40 лет:\n", base_doctors_list_women_40)
-        text5 = get_text_test_or_doctors("Общие обследования:\n", base_tests_list_all)
-        text6 = get_text_test_or_doctors("Обследования для женщин старше 40 лет:\n", base_tests_list_women_40)
-        text7 = get_text_test_or_doctors("Обследования для мужчин старше 40 лет:\n", base_tests_list_men_40)
-        text8 = get_text_test_or_doctors("Дополнительные обследования по вредностям:\n", summary)
+        # text3 = get_text_test_or_doctors("Специалисты для мужчин старше 40 лет:\n", base_doctors_list_men_40)
+        # text4 = get_text_test_or_doctors("Специалисты для женщин старше 40 лет:\n", base_doctors_list_women_40)
+        text3 = get_text_test_or_doctors("Общие обследования:\n", base_tests_list_all)
+        text4 = get_text_test_or_doctors("Общие обследования для женщин:\n",base_tests_women )
+        text5 = get_text_test_or_doctors("Обследования для женщин старше 40 лет:\n", base_tests_list_women_40)
+        text6 = get_text_test_or_doctors("Обследования для мужчин старше 40 лет:\n", base_tests_list_men_40)
+        text7 = get_text_test_or_doctors("Дополнительные обследования по вредностям:\n", summary)
 
         summary_text = f"""
         ♦️{text1}
@@ -166,16 +167,69 @@ async def profession_menu_handler(update: Update, context: ContextTypes.DEFAULT_
         ♦️{text5}
         ♦️{text6}
         ♦️{text7}
-        ♦️{text8}
         """
 
         # for item, count in summary.items():
         #     summary_text += f"– {item}: {count} шт.\n"
 
-        await update.callback_query.message.reply_text(summary_text)
+        # await update.callback_query.message.reply_text(summary_text)
+        await send_styled_excel_table_to_user(update,context,base_tests_list_all, base_doctors_list_women,base_tests_list_all,base_tests_women,base_tests_list_women_40,base_tests_list_men_40, summary)
         return ConversationHandler.END
     else:
         return None
+
+import pandas as pd
+from io import BytesIO
+from telegram import Update
+from telegram.ext import ContextTypes
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, PatternFill, Alignment
+
+async def send_styled_excel_table_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE, *dicts):
+    # 1. Собираем данные из переданных словарей
+    combined = {}
+    for d in dicts:
+        for name, qty in d.items():
+            combined[name] = combined.get(name, 0) + qty
+
+    # 2. Формируем DataFrame
+    df = pd.DataFrame(
+        list(combined.items()),
+        columns=["Врач/обследование", "Количество"]
+    )
+
+    # 3. Пишем DataFrame в Excel в память
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Таблица")
+        ws = writer.book["Таблица"]
+
+        # 4. Стилизация заголовков
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill("solid", fgColor="4F81BD")
+        header_align = Alignment(horizontal="center", vertical="center")
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+
+        # 5. Автоширина колонок
+        for col in ws.columns:
+            max_length = max(len(str(cell.value)) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max_length + 2
+
+
+    output.seek(0)
+
+    # 6. Отправляем файл пользователю
+    await context.bot.send_document(
+        chat_id=update.effective_chat.id,
+        document=output,
+        filename="таблица_осмотров.xlsx",
+        caption="📊 Ваша стилизованная таблица готова"
+    )
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await tg_bot_navigation.start(update, context)
