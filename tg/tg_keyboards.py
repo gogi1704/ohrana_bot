@@ -99,8 +99,11 @@ QUESTION_DATA = {
 }
 
 web_app_keys = [
-    [KeyboardButton("Выбрать из списка", web_app=WebAppInfo(url=resources.web_app_url))]
+    [KeyboardButton("Чтобы выбрать из списка нажмите сюда", web_app=WebAppInfo(url=resources.web_app_url))]
 ]
-web_app_keyboard = ReplyKeyboardMarkup(web_app_keys)
+web_app_keyboard = ReplyKeyboardMarkup(
+    web_app_keys,
+    resize_keyboard=True
+)
 
 

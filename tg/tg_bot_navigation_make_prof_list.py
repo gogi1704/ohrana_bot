@@ -173,7 +173,7 @@ async def profession_menu_handler(update: Update, context: ContextTypes.DEFAULT_
         #     summary_text += f"– {item}: {count} шт.\n"
 
         # await update.callback_query.message.reply_text(summary_text)
-        await send_styled_excel_table_to_user(update,context,base_tests_list_all, base_doctors_list_women,base_tests_list_all,base_tests_women,base_tests_list_women_40,base_tests_list_men_40, summary)
+        await send_styled_excel_table_to_user(update,context,base_doctors_list_all, base_doctors_list_women, base_tests_list_all, base_tests_women, base_tests_list_women_40,base_tests_list_men_40, summary)
         return ConversationHandler.END
     else:
         return None
@@ -227,7 +227,7 @@ async def send_styled_excel_table_to_user(update: Update, context: ContextTypes.
         chat_id=update.effective_chat.id,
         document=output,
         filename="таблица_осмотров.xlsx",
-        caption="📊 Ваша стилизованная таблица готова"
+        caption="📊 Ваша таблица готова"
     )
 
 

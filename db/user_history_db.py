@@ -137,6 +137,12 @@ async def init_db():
             if "duplicate column name" not in str(e):
                 raise  # Только если колонка уже есть — игнорируем
 
+        try:
+            await db.execute("ALTER TABLE messages ADD COLUMN created_at TEXT DEFAULT NULL ")
+        except aiosqlite.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise  # Только если колонка уже есть — игнорируем
+
 
         await db.commit()
     await sync_from_google_sheets()
@@ -366,14 +372,22 @@ async def get_user_name(user_id: int) -> Optional[str]:
 
 
 async def add_or_update_message(user_id: int, message: str) -> None:
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT 1 FROM messages WHERE user_id = ?", (user_id,)) as cursor:
             exists = await cursor.fetchone()
 
         if exists:
-            await db.execute("UPDATE messages SET message = ? WHERE user_id = ?", (message, user_id))
+            await db.execute(
+                "UPDATE messages SET message = ?, created_at = ? WHERE user_id = ?",
+                (message, now, user_id)
+            )
         else:
-            await db.execute("INSERT INTO messages (user_id, message) VALUES (?, ?)", (user_id, message))
+            await db.execute(
+                "INSERT INTO messages (user_id, message, created_at) VALUES (?, ?, ?)",
+                (user_id, message, now)
+            )
 
         await db.commit()
 

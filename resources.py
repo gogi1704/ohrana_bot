@@ -1,6 +1,6 @@
 # base_url = "http://213.148.9.40:8000/"
 base_url = "http://127.0.0.1:5000/"
-web_app_url = "https://tg-web-59ft8045w-gogi1704s-projects.vercel.app"
+web_app_url = "https://tg-web-p6am7tbn8-gogi1704s-projects.vercel.app"
 api_commands = {
                 "transfer":"api/transfer_get_date",
                 "manager":"api/manager_get_info",
