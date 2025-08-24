@@ -9,7 +9,7 @@ from telegram.constants import ChatAction
 from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from tg import tg_keyboards as keyboards
 import asyncio
-import  tg.tg_bot_timer as tg_timer
+from tg import tg_bot_timer as tg_timer
 
 REPLY_TO_MANAGER = range(1)
 
